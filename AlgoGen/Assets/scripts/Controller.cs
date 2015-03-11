@@ -14,23 +14,26 @@ public class Controller : MonoBehaviour {
 	private List<GameObject> boxes;
 	private int dimX, dimY, dimZ;
 	private int[] boxByPriority;
-	private int[][] boxesPushed;
-	private int[][][][] spaceMat; //position{3} - id/priority
+	private int[,] boxesPushed;
+	private Vector3[] boxPositions;
+	private int[,,,] spaceMat; //position{3} - id/priority
+	private int[] chromosome;
 
 	void Start () {
 		boxes = new List<GameObject> ();
 		boxByPriority = new int[11];
-		boxesPushed = new int[numberOfBoxes][2];
+		boxPositions = new Vector3[numberOfBoxes];
+		boxesPushed = new int[numberOfBoxes,2];
 		GameObject f = (GameObject)Instantiate (floor);
-		f.SendMessage ("resize", new Vector3 (contenerWidth,contenerLength,1));
+		f.SendMessage ("resize", new Vector3 (contenerWidth/10,contenerLength/10,1));
 		f.SendMessage("move", new Vector3 (0,0,0));
 
 		f = Instantiate (wall)  as GameObject;
 
-		f.SendMessage ("resize", new Vector3 (contenerHeight,contenerLength,1));
+		f.SendMessage ("resize", new Vector3 (contenerHeight/10,contenerLength/10,1));
 		f.SendMessage("move", new Vector3 (0,0,0));
 
-		Debug.Log ("-------Box----------");
+		//Debug.Log ("-------Box----------");
 		for (int i = 0; i < numberOfBoxes; i++) {
 			float width, length, height;
 			int priority;
@@ -53,28 +56,43 @@ public class Controller : MonoBehaviour {
 			boxes.Add((GameObject) Instantiate(box));
 			boxes[i].SendMessage("resize", new Vector3(width,length,height));
 			boxes[i].SendMessage("setPriority", priority);
-			boxes[i].SendMessage("move", new Vector3 (0,0,0));
+			//boxes[i].SendMessage("move", new Vector3 (0,0,0));
 			++boxByPriority[priority];
 			//boxes[i].SetActive(false);
 		}
-		dimX = contenerWidth / 100; dimY = contenerLength / 100; dimZ = contenerHeight / 100;
-		spaceMat = new int[dimX][dimY][dimZ][2];
-		getBoxAt (new Vector3 (0, 0));
+		dimX = Mathf.RoundToInt(contenerWidth * 10); dimY = Mathf.RoundToInt(contenerLength * 10); dimZ = Mathf.RoundToInt(contenerHeight * 10);
+		spaceMat = new int[dimX,dimY,dimZ,2];
+		//Debug.Log (dimX);
+		Debug.Log("dim: "+dimX+" ; "+dimY+" ; "+dimZ);
+		chromosome = initialisze ();
+		orderBoxes (chromosome);
+		Debug.Log ("score : " + scoring ());
+		//Debug.Log ("----------------------");
+		//Debug.Log ("move to 0,0,0");
+		//boxes[0].SendMessage("move", new Vector3 (0,0,0));
+		//boxes[0].SendMessage("move", new Vector3 (0,0,12));
+		//Debug.Log ("----------------------");
+		//Debug.Log ("move to 0,0,0.12");
+		//((Default)boxes [0].GetComponentsInChildren<Default> () [0]).move (new Vector3 (24/  10, 0 / 10, 12 / 10));
 	}
 	int getBoxAt(Vector3 pos, bool priority = false){
-		return spaceMat[pos.x][pos.y][pos.z][(priority ? 1:0)];
+		return spaceMat[(int)pos.x,(int)pos.y,(int)pos.z,(priority ? 1:0)];
 	}
 	int getBoxAt(int x, int y, int z, bool priority = false){
-		return spaceMat[x][y][z][(priority ? 1:0)];
+		return spaceMat[x,y,z,(priority ? 1:0)];
 	}
 
 	bool checkPos(int x,int y, int z,Vector3 bSize){
+
 		if (x + bSize.x > dimX || y + bSize.y > dimY || z + bSize.z > dimZ)
 						return false;
+		//Debug.Log ("size : " + bSize.x + " ; " + bSize.y + " ; " + bSize.z);
+		//Debug.Log("position : " + x + " ; " + y + " ; " + z);
+
 		if(z>0){
 			for(int xx = x; xx < x+bSize.x;xx++){
 				for(int yy = y; yy<y+bSize.y;yy++){
-					if(spaceMat[xx][yy][z-1][1] == 0)
+					if(spaceMat[xx,yy,z-1,1] == 0)
 						return false;
 				}
 			}
@@ -83,7 +101,7 @@ public class Controller : MonoBehaviour {
 		for(int xx = x; xx < x+bSize.x;xx++){
 			for(int yy = y; yy<y+bSize.y;yy++){
 				for(int zz = z; zz<z+bSize.z; zz++){
-					if(spaceMat[xx][yy][z-1][1] != 0)
+					if(spaceMat[xx,yy,zz,1] != 0)
 						return false;
 				}
 			}
@@ -91,28 +109,41 @@ public class Controller : MonoBehaviour {
 		return true;
 
 	}
+	int[] initialisze(){
+		int[] chrom = new int[numberOfBoxes];
+		for (int i = 0; i<numberOfBoxes; ++i)
+						chrom [i] = i;
+		for (int i1 = 0; i1<numberOfBoxes-1; ++i1){
+			int i2 = Random.Range(i1, numberOfBoxes-1);
+			int temp = chrom[i2];
+			chrom[i2] = chrom[i1];
+			chrom[i1] = temp;
+		}
+		return chrom;
+	}
 	bool moveBoxTo(int x, int y, int z, int boxIndex, bool rotate = false){
-		Debug.Log ("moving box");
+		//Debug.Log ("moving box to : " + x + " ; " + y + " ; " + z);
 		Default sc = (Default)boxes [boxIndex].GetComponentsInChildren<Default> () [0];
 		if(rotate) sc.rotate();
-		if(rotate) Debug.Log ("rotate");
+		//if(rotate) Debug.Log ("rotate");
 		Vector3 bSize = sc.getSize ();
 		bSize*=10;
 		if(!checkPos(x,y,z,bSize)) return false;
-
+		sc.move (new Vector3 ((float)x/10, (float)y/10, (float)z/10));
+		Debug.Log("move to : " + (float)x/10 + " ; " + (float)y/10 + " ; " + (float)z/10);
 		int priority = sc.getPriority ();
 		for(int xx = x; xx < x+bSize.x;xx++){
 			for(int yy = y; yy<y+bSize.y;yy++){
 				for(int zz = z; zz<z+bSize.z; zz++){
-					spaceMat[xx][yy][zz][0] = boxIndex;
-					spaceMat[xx][yy][zz][1] = priority;
+					spaceMat[xx,yy,zz,0] = boxIndex;
+					spaceMat[xx,yy,zz,1] = priority;
 				}
 			}
 		}
 		for(int i =0; i<numberOfBoxes; i++){
-			if(boxesPushed[i][1]==0){
-				boxesPushed[i][0] = boxIndex;
-				boxesPushed[i][1] = priority;
+			if(boxesPushed[i,1]==0){
+				boxesPushed[i,0] = boxIndex;
+				boxesPushed[i,1] = priority;
 				return true;
 			}
 		}
@@ -123,15 +154,19 @@ public class Controller : MonoBehaviour {
 	void orderBoxes(int[] chrom){
 		clearSpace ();
 		for(int i = 0; i<numberOfBoxes; i++){
-			boxesPushed[i][0] = boxesPushed[i][1] = 0;
+			boxesPushed[i,0] = boxesPushed[i,1] = 0;
+			//boxPositions[i]=new Vector3(0,0);
 		}
 		for(int i = 0; i< chrom.Length; i++){
-		LoopStart:bool pushed = false;
+			bool pushed = false;
 			for(int y = 0; y<dimY; y++){
 				for(int x = 0; x<dimX; x++){
 					for(int z = 0; z<dimZ; z++){
-						if(getBoxAt(x,y,z)==0){
+						if(spaceMat [x,y,z,0] == -1){
+							if(z>0 && spaceMat [x,y,z-1,0]==-1) break;
 							if(moveBoxTo(x,y,z,chrom[i])||moveBoxTo(x,y,z,chrom[i], true)){
+								//Debug.Log("pushed "+chrom[i]+" to : " + x + " ; " + y + " ; " + z);
+								boxPositions[chrom[i]] = new Vector3(x,y,z);
 								pushed = true;
 								break;
 							}
@@ -146,52 +181,124 @@ public class Controller : MonoBehaviour {
 	}
 
 	float scoring(){
-		float fr, fo, kr, ko;
+		float fr, fo, kr = 1, ko = 1;
 		int space_left = 0;
 		for (int x = 0; x< dimX; x++)
 						for (int y = 0; y<dimY; y++)
 								for (int z = 0; z<dimZ; z++)
-										if (spaceMat [x] [y] [z] [0] == 0)
+										if (spaceMat [x,y,z,0] == -1)
 												++space_left;
 		fr = 1 - (space_left / (dimX * dimY * dimZ));
 
 		float fo_c1 = 0, fo_c2 = 0, fo_c3 = 0;
 
+		//---Calcul premiere composante---//
 		for (int p = 1; p<=10; p++) {
+			if(boxByPriority[p]==0){
+				fo_c1 ++;
+				continue;
+			}
 			int np = 0;
 			for(int i =0; i<numberOfBoxes; i++)
-				if(boxesPushed[i][1]==p)
+				if(boxesPushed[i,1]==p)
 					++np;
 
 			if(np == boxByPriority[p]){
 				++fo_c1;
 				continue;
 			}
-			int vol_pm = 0, vol_p;			//vol_pm: volume boxes pose de priorté inf ; vol_p : plus petite caisse de priorité p
+			int vol_pm = 0, vol_p = 9999;			//vol_pm: volume boxes pose de priorté inf ; vol_p : plus petite caisse de priorité p
 			for(int i =0; i<numberOfBoxes; i++)
-				if(boxesPushed[i][1]==p+1)
-					vol_pm += getVolume(boxesPushed[i][0]);
-			for(
+				if(boxesPushed[i,1]==p+1)
+					vol_pm += getVolume(boxesPushed[i,0]);
+			for(int i = 0; i<numberOfBoxes; ++i){
+				if(((Default)boxes [i].GetComponentsInChildren<Default> () [0]).getPriority ()==p){
+					int v = getVolume(i);
+					vol_p= (v>vol_p?v:vol_p);
+				}
+			}
+			if(vol_pm+space_left<vol_p)
+				++fo_c1;
+			else
+				fo_c1 += 1-(vol_pm+space_left)/(dimX * dimY * dimZ);
 		}
 
+		for(int priority = 1; priority <= 10; ++priority){
+			if(boxByPriority[priority]==0){
+				fo_c2 ++;
+				fo_c3 ++;
+				continue;
+			}
+			int index = 0;
+			int n1 = 0, n2 = 0;
+			while (index < boxesPushed.Length/2 && boxesPushed[index,1]!=0) {
+				if(boxesPushed[index,1]!=priority){
+					++index;
+					continue;
+				}
+				Vector3 pos = boxPositions[boxesPushed[index,0]];
+				Vector3 size = ((Default)boxes [boxesPushed[index,0]].GetComponentsInChildren<Default> () [0]).getSize ();
+				size*=10;
+				for (int x = (int)pos.x; x< pos.x+size.x; x++){
+					for (int z = (int)pos.z; z<pos.z+size.z; z++){
+						for(int y = (int)pos.y; y>=0; --y){
+							if (spaceMat [x,y,z,1] > priority){
+								++n1;
+								goto Next_Comp;
+							}
+						}
+					}
+				}
+			Next_Comp:for(int x = (int)pos.x; x< pos.x+size.x; x++){
+					for (int y = (int)pos.y; y<pos.y+size.y; y++){
+						for(int z = (int)pos.z+(int)size.z; z<dimZ; z++){
+							if (spaceMat [x,y,z,1] > priority){
+								++n2;
+								goto Next_Loop;
+							}
+						}
+					}
+				}
+			Next_Loop:++index;
+			}
+			fo_c2 += 1-n1/boxByPriority[priority];
+			fo_c3 += 1-n2/boxByPriority[priority];
+
+		}
+
+		fo = fo_c1 + fo_c2 + fo_c3;
+		fo /= 30;
 	
+
+		//--------Test---------//
+		/*int vv = 0;
+		int ii =0;
+		//Debug.Log (boxesPushed.Length/2);
+		while (ii < boxesPushed.Length/2 && boxesPushed[ii,1]!=0) {
+			vv+=getVolume(boxesPushed[ii,0]);
+			ii++;
+		};
+		Debug.Log (dimX * dimY * dimZ - space_left - vv);*/
+		//END
+
+		return (fo * ko + fr * kr) / (ko + kr);
 	}
 
 	int getVolume(int boxIndex){
 		Vector3 v = ((Default)boxes [boxIndex].GetComponentsInChildren<Default> () [0]).getSize ();
-		return v.x * v.y * v.z * 1000;
+		return (int)(v.x * v.y * v.z * 1000);
 	}
 	void clearSpace(){
 		for (int x = 0; x< dimX; x++){
 			for (int y = 0; y<dimY; y++){
 				for (int z = 0; z<dimZ; z++){
-					spaceMat [x] [y] [z] [0] = 0;
-					spaceMat [x] [y] [z] [1] = 0;
+					spaceMat [x,y,z,0] = -1;
+					spaceMat [x,y,z,1] = 0;
 				}
 			}
 		}
-
 	}
+
 	// Update is called once per frame
 	void Update () {
 	
