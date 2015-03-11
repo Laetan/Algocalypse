@@ -14,23 +14,12 @@ public class BoxScript : MonoBehaviour {
 		
 	}
 	
-	void setPriority(int value){
+	public void setPriority(int value){
 		priority = value;
 	}
 	
 	int getPriority(){
 		return priority;
 	}
-
-	void setSize(int width, int length, int height){
-		GameObject box = GameObject.Find ("/box");
-		box.transform.localScale.Set(width,height,length);
-		box.transform.position.Set(width / 2,height / 2,length / 2);
-	}
-	Vector3 getSize(){
-		GameObject box = GameObject.Find ("/box");
-		return new Vector3(box.transform.localScale.x, box.transform.localScale.y, box.transform.localScale.z);
-	}
-
-
+	
 }
