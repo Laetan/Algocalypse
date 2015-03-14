@@ -15,15 +15,29 @@ public class Controller : MonoBehaviour {
 	private int dimX, dimY, dimZ;
 	private int[] boxByPriority;
 	private int[,] boxesPushed;
-	private Vector3[] boxPositions;
+	private Vector3[] boxPositions, boxSizes;
 	private int[,,,] spaceMat; //position{3} - id/priority
+	private List<Vector3> vertex;
+	private Vector3[,] boxSizePositions;
 	private int[] chromosome;
-
+	private int minx,minY,minZ;
+	private int pasX, pasY,pasZ;
+	/**
+	 * Algo placement
+	 * calculer point au angles des boites -> creer mesh de boites
+	 * recuperer position et taille des boites posée
+	 * Quand on place une nouvelle boites, la placer sur un point du mesh
+	 * Verfifer si un autre point existe sans la zone de la boite
+	 * verifier la collision avec toute les boites
+	 * */
 	void Start () {
 		boxes = new List<GameObject> ();
 		boxByPriority = new int[11];
 		boxPositions = new Vector3[numberOfBoxes];
 		boxesPushed = new int[numberOfBoxes,2];
+		boxSizePositions = new Vector3[numberOfBoxes, 2];
+		boxSizes = new Vector3[numberOfBoxes];
+		vertex = new List<Vector3> ();
 		GameObject f = (GameObject)Instantiate (floor);
 		f.SendMessage ("resize", new Vector3 (contenerWidth/10,contenerLength/10,1));
 		f.SendMessage("move", new Vector3 (0,0,0));
@@ -34,6 +48,10 @@ public class Controller : MonoBehaviour {
 		f.SendMessage("move", new Vector3 (0,0,0));
 
 		//Debug.Log ("-------Box----------");
+		int[][] sizes = new int[3][]; 
+		sizes [0] = new int[numberOfBoxes];
+		sizes [1] = new int[numberOfBoxes];
+		sizes [2] = new int[numberOfBoxes];
 		for (int i = 0; i < numberOfBoxes; i++) {
 			float width, length, height;
 			int priority;
@@ -52,9 +70,11 @@ public class Controller : MonoBehaviour {
 				width =2.400F;
 				length = 0.800F;
 			}
+			sizes[0][i] = (int)(width*1000); sizes[1][i] = (int)(length*1000); sizes[2][i] = (int)(height*1000);
+			boxSizes[i] = new Vector3(width,length,height);
 			height = height==1? .500F : (height == 2 ? 1.2F : 2.0F);
 			boxes.Add((GameObject) Instantiate(box));
-			boxes[i].SendMessage("resize", new Vector3(width,length,height));
+			boxes[i].SendMessage("resize", boxSizes[i]);
 			boxes[i].SendMessage("setPriority", priority);
 			//boxes[i].SendMessage("move", new Vector3 (0,0,0));
 			++boxByPriority[priority];
@@ -62,11 +82,12 @@ public class Controller : MonoBehaviour {
 		}
 		dimX = Mathf.RoundToInt(contenerWidth * 10); dimY = Mathf.RoundToInt(contenerLength * 10); dimZ = Mathf.RoundToInt(contenerHeight * 10);
 		spaceMat = new int[dimX,dimY,dimZ,2];
+		Debug.Log (getPas (getPas(sizes[0]),getPas(sizes[1])));
 		//Debug.Log (dimX);
-		Debug.Log("dim: "+dimX+" ; "+dimY+" ; "+dimZ);
-		chromosome = initialisze ();
-		orderBoxes (chromosome);
-		Debug.Log ("score : " + scoring ());
+		//Debug.Log("dim: "+dimX+" ; "+dimY+" ; "+dimZ);
+		//chromosome = initialisze ();
+		//orderBoxes (chromosome);
+		//Debug.Log ("score : " + scoring ());
 		//Debug.Log ("----------------------");
 		//Debug.Log ("move to 0,0,0");
 		//boxes[0].SendMessage("move", new Vector3 (0,0,0));
@@ -302,5 +323,29 @@ public class Controller : MonoBehaviour {
 	// Update is called once per frame
 	void Update () {
 	
+	}
+
+	int getPas(int[] sizes){
+		if (sizes.Length > 2) {
+			int mid = sizes.Length/2;
+			int[] sub1 = new int[mid];
+			int[] sub2 = new int[sizes.Length-mid];
+			for(int i = 0; i< sizes.Length; ++i){
+				if(i<mid) sub1[i] = sizes[i];
+				else sub2[i-mid] = sizes[i];
+			}
+			int[] sub = {getPas(sub1), getPas(sub2)};
+			return getPas(sub);
+		}
+		else if(sizes.Length==2){
+			return getPas(sizes[0],sizes[1]);
+
+		}
+		else
+			return sizes[0];
+	}
+
+	int getPas(int a, int b){
+		return b == 0 ? a : getPas(b, a % b);
 	}
 }
