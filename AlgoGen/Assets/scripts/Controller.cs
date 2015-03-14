@@ -8,6 +8,9 @@ public class Controller : MonoBehaviour {
 	public float contenerHeight;
 
 	public int numberOfBoxes;
+	public int population;
+	public int numberOfEvolutions;
+	public bool stepByStep;
 	public bool randomBoxes;
 	public GameObject floor, wall, box;
 	
@@ -17,7 +20,7 @@ public class Controller : MonoBehaviour {
 	private int[,] boxesPushed;
 	private Vector3[] boxPositions;
 	private int[,,,] spaceMat; //position{3} - id/priority
-	private int[] chromosome;
+	private int[,] chromosomes;
 
 	void Start () {
 		boxes = new List<GameObject> ();
@@ -64,9 +67,9 @@ public class Controller : MonoBehaviour {
 		spaceMat = new int[dimX,dimY,dimZ,2];
 		//Debug.Log (dimX);
 		Debug.Log("dim: "+dimX+" ; "+dimY+" ; "+dimZ);
-		chromosome = initialisze ();
-		orderBoxes (chromosome);
-		Debug.Log ("score : " + scoring ());
+
+		initialiszePopulation ();
+		Debug.Log (chromosomes);
 		//Debug.Log ("----------------------");
 		//Debug.Log ("move to 0,0,0");
 		//boxes[0].SendMessage("move", new Vector3 (0,0,0));
@@ -109,17 +112,19 @@ public class Controller : MonoBehaviour {
 		return true;
 
 	}
-	int[] initialisze(){
-		int[] chrom = new int[numberOfBoxes];
+	void initialiszePopulation(){
+		chromosomes = new int[population, numberOfBoxes];
 		for (int i = 0; i<numberOfBoxes; ++i)
-						chrom [i] = i;
-		for (int i1 = 0; i1<numberOfBoxes-1; ++i1){
-			int i2 = Random.Range(i1, numberOfBoxes-1);
-			int temp = chrom[i2];
-			chrom[i2] = chrom[i1];
-			chrom[i1] = temp;
+			for(int j = 0; j < population; ++j)
+				chromosomes [j,i] = i;
+		for(int j = 0; j < population; ++j){
+			for (int i1 = 0; i1<numberOfBoxes-1; ++i1){
+				int i2 = Random.Range(0, numberOfBoxes-1);
+				int temp = chromosomes[j,i2];
+				chromosomes[j,i2] = chromosomes[j,i1];
+				chromosomes[j,i1] = temp;
+			}
 		}
-		return chrom;
 	}
 	bool moveBoxTo(int x, int y, int z, int boxIndex, bool rotate = false){
 		//Debug.Log ("moving box to : " + x + " ; " + y + " ; " + z);
@@ -299,6 +304,55 @@ public class Controller : MonoBehaviour {
 		}
 	}
 
+	int[,] permut(int[,] chromO , float probPermut){
+		int[,] chromP = new int[population, numberOfBoxes];
+
+		for (int parent1 = 0; parent1 < population; ++parent1) {
+			int parent2 = Random.Range(0,population-1);
+			for(int g = 0; g < numberOfBoxes; ++g)
+				chromP[parent1 ,g]=0;
+			for(int g = 0; g < numberOfBoxes; ++g){
+				float prob = Random.value;
+				if(prob<=probPermut && chromP[parent1 ,g]==0){
+					chromP[parent1 ,g] = chromO[parent2 ,g];
+					chromP[parent2 ,g] = chromO[parent1 ,g];
+					for(int i = 0; i < numberOfBoxes; ++i){
+						if(chromO[parent1, i] == chromP[parent1,g]){
+							for(int j = 0; j < numberOfBoxes; ++j){
+								if(chromO[parent2, j] == chromP[parent2,g]){
+									chromP[parent1,i] = chromO[parent2,j];
+									chromP[parent2,j] = chromO[parent1,i];
+									break;
+								}
+							}
+							break;
+						}
+
+					}
+
+				}
+				else if( chromP[parent1 ,g]==0)
+					chromP[parent1 ,g] = chromO[parent1 ,g];
+
+			}
+		}
+
+		return chromP;
+	}
+
+	int[,] mutat(int[,] chromO , float probMut){
+		for(int chr = 0; chr < population; ++chr){
+			for(int g = 0; g < numberOfBoxes; ++g){
+				if(Random.value < probMut){
+					int g2 = Random.Range(0,numberOfBoxes-1);
+					int temp = chromO[chr,g];
+					chromO[chr,g] = chromO[chr,g2];
+					chromO[chr,g2] = temp;
+				}
+			}
+		}
+		return chromO;
+	}
 	// Update is called once per frame
 	void Update () {
 	
