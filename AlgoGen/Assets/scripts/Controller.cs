@@ -8,8 +8,12 @@ public class Controller : MonoBehaviour {
 	public float contenerHeight;
 
 	public int numberOfBoxes;
+	public int population;
+	public int numberOfEvolutions;
+	public bool stepByStep;
 	public bool randomBoxes;
 	public GameObject floor, wall, box;
+	public Canvas UI;
 	
 	private List<GameObject> boxes;
 	private int dimX, dimY, dimZ;
@@ -17,11 +21,26 @@ public class Controller : MonoBehaviour {
 	private int[,] boxesPushed;
 	private Vector3[] boxPositions, boxSizes;
 	private int[,,,] spaceMat; //position{3} - id/priority
-	private List<Vector3> vertex;
-	private Vector3[,] boxSizePositions;
+	private List<Vector3> startPoints;
+	private List<Lane> lanes;
+	private int maxActiv,activ;
+
+	struct Lane{
+		public float x1, y1, x2, y2, z;
+
+		public Lane(float xa, float ya, float xb, float yb, float Z){
+			x1 = (xa < xb ? xa : (xa > xb ? xb : (ya < yb ? xa : xb)));
+			x2 = (xa < xb ? xb : (xa > xb ? xa : (ya < yb ? xb : xa)));
+			y1 = (xa < xb ? ya : (xa > xb ? yb : (ya < yb ? ya : yb)));
+			y2 = (xa < xb ? yb : (xa > xb ? ya : (ya < yb ? yb : ya)));
+			z=Z;
+		}
+	}
+	//private Vector3[,] boxSizePositions;
 	private int[] chromosome;
-	private int minx,minY,minZ;
+	private float minX,minY,minZ;
 	private int pasX, pasY,pasZ;
+	private float time;
 	/**
 	 * Algo placement
 	 * calculer point au angles des boites -> creer mesh de boites
@@ -30,14 +49,25 @@ public class Controller : MonoBehaviour {
 	 * Verfifer si un autre point existe sans la zone de la boite
 	 * verifier la collision avec toute les boites
 	 * */
+
+	private int[][] chromosomes;
+
+
 	void Start () {
+		time = Time.realtimeSinceStartup;
 		boxes = new List<GameObject> ();
 		boxByPriority = new int[11];
 		boxPositions = new Vector3[numberOfBoxes];
 		boxesPushed = new int[numberOfBoxes,2];
-		boxSizePositions = new Vector3[numberOfBoxes, 2];
+		//boxSizePositions = new Vector3[numberOfBoxes, 2];
 		boxSizes = new Vector3[numberOfBoxes];
-		vertex = new List<Vector3> ();
+		startPoints = new List<Vector3> ();
+		lanes = new List<Lane> ();
+		minX = contenerWidth;
+		minY = contenerLength;
+		minZ = contenerHeight;
+
+
 		GameObject f = (GameObject)Instantiate (floor);
 		f.SendMessage ("resize", new Vector3 (contenerWidth/10,contenerLength/10,1));
 		f.SendMessage("move", new Vector3 (0,0,0));
@@ -70,31 +100,37 @@ public class Controller : MonoBehaviour {
 				width =2.400F;
 				length = 0.800F;
 			}
-			sizes[0][i] = (int)(width*1000); sizes[1][i] = (int)(length*1000); sizes[2][i] = (int)(height*1000);
-			boxSizes[i] = new Vector3(width,length,height);
 			height = height==1? .500F : (height == 2 ? 1.2F : 2.0F);
+			sizes[0][i] = (int)(width*1000); sizes[1][i] = (int)(length*1000); sizes[2][i] = (int)(height*1000);
+			minX = (minX > width ? width : minX);
+			minY = (minY > length ? length : minY);
+			minZ = (minZ > height ? height : minZ);
+			boxSizes[i] = new Vector3(width,length,height);
+			boxPositions[i] = new Vector3(-1,-1,-1);
 			boxes.Add((GameObject) Instantiate(box));
 			boxes[i].SendMessage("resize", boxSizes[i]);
 			boxes[i].SendMessage("setPriority", priority);
+			boxes[i].SendMessage("setId", i);
 			//boxes[i].SendMessage("move", new Vector3 (0,0,0));
 			++boxByPriority[priority];
 			//boxes[i].SetActive(false);
 		}
 		dimX = Mathf.RoundToInt(contenerWidth * 10); dimY = Mathf.RoundToInt(contenerLength * 10); dimZ = Mathf.RoundToInt(contenerHeight * 10);
 		spaceMat = new int[dimX,dimY,dimZ,2];
-		Debug.Log (getPas (getPas(sizes[0]),getPas(sizes[1])));
-		//Debug.Log (dimX);
-		//Debug.Log("dim: "+dimX+" ; "+dimY+" ; "+dimZ);
-		//chromosome = initialisze ();
-		//orderBoxes (chromosome);
-		//Debug.Log ("score : " + scoring ());
-		//Debug.Log ("----------------------");
-		//Debug.Log ("move to 0,0,0");
-		//boxes[0].SendMessage("move", new Vector3 (0,0,0));
-		//boxes[0].SendMessage("move", new Vector3 (0,0,12));
-		//Debug.Log ("----------------------");
-		//Debug.Log ("move to 0,0,0.12");
-		//((Default)boxes [0].GetComponentsInChildren<Default> () [0]).move (new Vector3 (24/  10, 0 / 10, 12 / 10));
+
+
+		startPoints.Add (new Vector3 (0, 0, 0));
+		lanes.Add(new Lane(0,0,contenerWidth,0,0));
+		lanes.Add(new Lane(0,0,0,contenerLength,0));
+		lanes.Add(new Lane(0,contenerLength,contenerWidth,contenerLength,0));
+		lanes.Add(new Lane(contenerWidth,0,contenerWidth,contenerLength,0));
+		/*lanes.Add(new float[5]{0,0,contenerWidth,0,0});
+		lanes.Add(new float[5]{0,0,0,contenerLength,0});
+		lanes.Add(new float[5]{0,contenerLength,contenerWidth,contenerLength,0});
+		lanes.Add(new float[5]{contenerWidth,0,contenerWidth,contenerLength,0});*/
+		initialiszePopulation ();
+		orderBoxes (chromosomes [0]);
+		display ();
 	}
 	int getBoxAt(Vector3 pos, bool priority = false){
 		return spaceMat[(int)pos.x,(int)pos.y,(int)pos.z,(priority ? 1:0)];
@@ -103,7 +139,7 @@ public class Controller : MonoBehaviour {
 		return spaceMat[x,y,z,(priority ? 1:0)];
 	}
 
-	bool checkPos(int x,int y, int z,Vector3 bSize){
+	/*bool checkPos(int x,int y, int z,Vector3 bSize){
 
 		if (x + bSize.x > dimX || y + bSize.y > dimY || z + bSize.z > dimZ)
 						return false;
@@ -129,78 +165,295 @@ public class Controller : MonoBehaviour {
 		}
 		return true;
 
-	}
-	int[] initialisze(){
-		int[] chrom = new int[numberOfBoxes];
-		for (int i = 0; i<numberOfBoxes; ++i)
-						chrom [i] = i;
-		for (int i1 = 0; i1<numberOfBoxes-1; ++i1){
-			int i2 = Random.Range(i1, numberOfBoxes-1);
-			int temp = chrom[i2];
-			chrom[i2] = chrom[i1];
-			chrom[i1] = temp;
+	}*/
+	void initialiszePopulation(){
+		chromosomes = new int[population][];
+		for (int j = 0; j < population; ++j) {
+			chromosomes[j] = new int[numberOfBoxes];
 		}
-		return chrom;
+		for (int i = 0; i<numberOfBoxes; ++i)
+			for(int j = 0; j < population; ++j)
+				chromosomes [j][i] = i;
+		for(int j = 0; j < population; ++j){
+			for (int i1 = 0; i1<numberOfBoxes-1; ++i1){
+				int i2 = Random.Range(0, numberOfBoxes-1);
+				int temp = chromosomes[j][i2];
+				chromosomes[j][i2] = chromosomes[j][i1];
+				chromosomes[j][i1] = temp;
+			}
+		}
 	}
-	bool moveBoxTo(int x, int y, int z, int boxIndex, bool rotate = false){
-		//Debug.Log ("moving box to : " + x + " ; " + y + " ; " + z);
-		Default sc = (Default)boxes [boxIndex].GetComponentsInChildren<Default> () [0];
-		if(rotate) sc.rotate();
-		//if(rotate) Debug.Log ("rotate");
-		Vector3 bSize = sc.getSize ();
-		bSize*=10;
-		if(!checkPos(x,y,z,bSize)) return false;
-		sc.move (new Vector3 ((float)x/10, (float)y/10, (float)z/10));
-		Debug.Log("move to : " + (float)x/10 + " ; " + (float)y/10 + " ; " + (float)z/10);
-		int priority = sc.getPriority ();
-		for(int xx = x; xx < x+bSize.x;xx++){
-			for(int yy = y; yy<y+bSize.y;yy++){
-				for(int zz = z; zz<z+bSize.z; zz++){
-					spaceMat[xx,yy,zz,0] = boxIndex;
-					spaceMat[xx,yy,zz,1] = priority;
+	
+	Vector3 pushToSide(Vector3 point, float length){
+		if (point.x == 0)
+						return point;
+		Debug.Log ("pushing");
+		float posX = 0;
+		Debug.Log ("start : "+point.x);
+		for (int i = 0; i < lanes.Count; ++i) {
+			Lane lane = lanes[i];
+			if(lane.x1 == lane.x2  && lane.x1 > posX && lane.x1<= point.x && lane.y1 < (point.y + length)  && lane.y2 > point.y){		// si ligne verticale et si ligne plus a droite que posX et si ligne dépasse sur boite
+		//		Debug.Log ("mid : "+lane.x1);
+				posX = lane.x1;								 
+			} 
+		}
+		Debug.Log ("end : "+posX);
+		point.x = posX;
+		return point;
+	}
+
+	bool checkSpace(Vector3 pos, Vector3 size){
+		if (pos.z + size.z > contenerHeight)
+						return false;
+		for (int i = 0; i < lanes.Count; ++i) {
+			Lane lane = lanes[i];
+			if(lane.y2>pos.y && lane.y1 < pos.y+ size.y && lane.x1<pos.x + size.x && lane.x2>pos.x)
+				return false;
+		}
+		return true;
+	}
+
+	void createLanes(Vector3 pos, Vector3 size){
+		addLane (new Lane (pos.x, pos.y, pos.x, pos.y + size.y, pos.z + size.z));
+		addLane (new Lane (pos.x, pos.y, pos.x + size.x, pos.y, pos.z + size.z));
+		addLane (new Lane (pos.x + size.x, pos.y, pos.x + size.x, pos.y + size.y, pos.z + size.z));
+		addLane (new Lane (pos.x, pos.y + size.y, pos.x + size.x, pos.y + size.y, pos.z + size.z));
+	}
+	
+	void addLane(Lane nl){
+		if(nl.x1 == nl.x2 && nl.y1 == nl.y2) return;
+		for (int i = lanes.Count-1; i >=0; --i) {
+			Lane lane = lanes[i];
+			if(nl.y1 == nl.y2 && lane.y2 == nl.y2 &&  lane.y1== nl.y1){
+				if(nl.x1 == lane.x2){
+					lanes.RemoveAt(i);
+					nl.x1 = lane.x1;
+				}
+				else if(nl.x2 == lane.x1){
+					lanes.RemoveAt(i);
+					nl.x2 = lane.x2;
+				}
+				else if(nl.x1 < lane.x1 && nl.x2 > lane.x2){
+					if(nl.z >= lane.z){lanes.RemoveAt(i); cleanStartPoints(lane);}
+					if(nl.z <= lane.z){
+						addLane(new Lane(lane.x2, lane.y2, nl.x2, nl.y2, nl.z)); 
+						nl.x2 = lane.x1;
+					}
+				}
+				else if(nl.x1 > lane.x1 && nl.x2 < lane.x2){
+					if(nl.z >= lane.z){
+						addLane(new Lane(nl.x2, nl.y2, lane.x2, lane.y2, lane.z)); 
+						lane.x2 = nl.x1;
+						cleanStartPoints(nl);
+					}
+					if(nl.z == lane.z) return;
+
+				}
+				else if(nl.x1 <= lane.x1 && nl.x2 >= lane.x1){
+					if(nl.x1 == lane.x1 && nl.x2 == lane.x2){ 
+						//cleanStartPoints(nl);
+						if(nl.z >= lane.z)lanes.Remove(lane);
+						if(nl.z <= lane.z)return;
+					}
+					if(nl.z > lane.z)lane.x1 = nl.x2;
+					else if(nl.z == lane.z) {
+						cleanStartPoints(new Lane(lane.x1, lane.y1, nl.x2,lane.y1, nl.z)); //To copy
+						float temp = lane.x1;
+						lane.x1 = nl.x2;
+						nl.x2 = temp;
+					}
+					else
+						nl.x2 = lane.x1;
+				}
+				else if(nl.x1 <= lane.x2 && nl.x2 >= lane.x2){
+					if(nl.z > lane.z) lane.x2 = nl.x1;
+					else if(nl.z == lane.z) {
+						cleanStartPoints(new Lane(lane.x2, lane.y1, nl.x1,lane.y1, nl.z)); //To copy
+						float temp = lane.x2;
+						lane.x2 = nl.x1;
+						nl.x1 = temp;
+					}
+					else
+						nl.x1 = lane.x2;
+				}
+
+			}
+			else if(nl.x1 == nl.x2 && lane.x2 == nl.x2 &&  lane.x1== nl.x1){
+				if(nl.y1 == lane.y2){
+					lanes.RemoveAt(i);
+					nl.y1 = lane.y1;
+				}
+				else if(nl.y2 == lane.y1){
+					lanes.RemoveAt(i);
+					nl.y2 = lane.y2;
+				}
+				else if(nl.y1 < lane.y1 && nl.y2 > lane.y2){
+					if(nl.z >= lane.z){lanes.RemoveAt(i); cleanStartPoints(lane);}
+					if(nl.z <= lane.z){
+						addLane(new Lane(lane.x2, lane.y2, nl.x2, nl.y2, nl.z)); 
+						nl.y2 = lane.y1;
+					}
+				}
+				else if(nl.y1 > lane.y1 && nl.y2 < lane.y2){
+					if(nl.z >= lane.z){
+						addLane(new Lane(nl.x2, nl.y2, lane.x2, lane.y2, lane.z)); 
+						lane.y2 = nl.y1;
+						cleanStartPoints(nl);
+					}
+					if(nl.z >= lane.z) return;
+					
+				}
+				else if(nl.y1 <= lane.y1 && nl.y2 >= lane.y1){
+					if(nl.y1 == lane.y1 && nl.y2 == lane.y2){ 
+						//cleanStartPoints(nl);
+						if(nl.z >= lane.z)lanes.Remove(lane);
+						if(nl.z <= lane.z)return;
+					}
+					if(nl.z > lane.z) lane.y1 = nl.y2;
+					else if(nl.z == lane.z) {
+						cleanStartPoints(new Lane(lane.x1, lane.y1, lane.x1,nl.y2, nl.z)); //To copy
+						float temp = lane.y1;
+						lane.y1 = nl.y2;
+						nl.y2 = temp;
+					}
+					else
+						nl.y2 = lane.y1;
+				}
+				else if(nl.y1 <= lane.y2 && nl.y2 >= lane.y2){
+					if(nl.z > lane.z) lane.y2 = nl.y1;
+					else if(nl.z == lane.z) {
+						cleanStartPoints(new Lane(lane.x1, nl.y1, lane.x1,lane.y2, nl.z)); //To copy
+						float temp = lane.y2;
+						lane.y2 = nl.y1;
+						nl.y1 = temp;
+					}
+					else
+						nl.y1 = lane.y2;
+				}
+			}
+			if(lane.x1 == lane.x2 && lane.y1 == lane.y2) lanes.Remove(lane);
+			if(nl.x1 == nl.x2 && nl.y1 == nl.y2) return;
+		}
+		lanes.Add (nl);
+
+	}
+
+	void createStartPoints(Vector3 pos, Vector3 size){
+		//Debug.Log ("Adding start points");
+		//Debug.Log ("size : "+size.x+" ; "+size.y+" ; "+size.z);
+		//Debug.Log ("pos : "+pos.x+" ; "+pos.y+" ; "+pos.z);
+		Vector3 p1 = pos, p2 = pos, p3 = pos;
+		p1.z += size.z;
+		p2.x += size.x;
+		p3.y += size.y;
+		addStartPoint (p1);
+		addStartPoint (p2);
+		addStartPoint (p3);
+	}
+
+	void cleanStartPoints(Lane lane){
+		for (int i = startPoints.Count-1; i >= 0; --i) {
+			Vector3 sp = startPoints[i];
+			if(sp.z == lane.z && lane.x1< sp.x && lane.x2 > sp.x && lane.y1 < sp.y && lane.y2 > sp.y)
+				startPoints.Remove(sp);
+		}
+	}
+
+	void addStartPoint(Vector3 point){
+		//Debug.Log ("taille : "+point.x);
+		if (point.x + minX > contenerWidth || point.y + minY > contenerLength || point.z + minZ > contenerHeight)
+						return;
+		for (int i = startPoints.Count-1; i >= 0; --i)
+						if (point.y == startPoints [i].y && point.x == startPoints [i].x && point.z > startPoints [i].z)
+								return;
+						else if (point.y == startPoints [i].y && point.x == startPoints [i].x && point.z < startPoints [i].z)
+								startPoints.Remove (startPoints [i]);
+
+
+		startPoints.Add (point);
+		//Debug.Log ("Added");
+	}
+
+	void orderStartPoints(){
+		bool flag = true;
+		while(flag){
+			flag = false;
+			for(int i = 0; i < startPoints.Count-1; ++i){
+				if(startPoints[i+1].y < startPoints[i].y ||
+				   (startPoints[i+1].y == startPoints[i].y && startPoints[i+1].x < startPoints[i].x) ||
+				   (startPoints[i+1].y == startPoints[i].y && startPoints[i+1].x == startPoints[i].x && startPoints[i+1].z < startPoints[i].z)){
+
+					Vector3 temp = startPoints[i];
+					startPoints[i] = startPoints[i+1];
+					startPoints[i+1] = temp;
+					flag = true;
+
 				}
 			}
 		}
-		for(int i =0; i<numberOfBoxes; i++){
-			if(boxesPushed[i,1]==0){
-				boxesPushed[i,0] = boxIndex;
-				boxesPushed[i,1] = priority;
-				return true;
-			}
-		}
-		Debug.LogError ("Could not push box into boxesPushed : out of bound");
-		return true;
-
+		for(int i = 0; i < startPoints.Count; ++i)Debug.Log ("sp : "+startPoints[i].x+" ; "+startPoints[i].y+" ; "+startPoints[i].z);
+		for(int i = 0; i < lanes.Count; ++i)Debug.Log ("lane : "+lanes[i].x1+" ; "+lanes[i].y1+" - "+lanes[i].x2+" ; "+lanes[i].y2+" - "+lanes[i].z);
 	}
 	void orderBoxes(int[] chrom){
-		clearSpace ();
 		for(int i = 0; i<numberOfBoxes; i++){
-			boxesPushed[i,0] = boxesPushed[i,1] = 0;
-			//boxPositions[i]=new Vector3(0,0);
+			boxPositions[i]=new Vector3(-1,-1);
 		}
+		Debug.Log (chrom.Length);
+		startPoints.Clear ();
+		lanes.Clear ();
+		startPoints.Add (new Vector3 (0, 0, 0));
+		lanes.Add(new Lane(0,0,contenerWidth,0,0));
+		lanes.Add(new Lane(0,0,0,contenerLength,0));
+		lanes.Add(new Lane(0,contenerLength,contenerWidth,contenerLength,0));
+		lanes.Add(new Lane(contenerWidth,0,contenerWidth,contenerLength,0));
 		for(int i = 0; i< chrom.Length; i++){
 			bool pushed = false;
-			for(int y = 0; y<dimY; y++){
-				for(int x = 0; x<dimX; x++){
-					for(int z = 0; z<dimZ; z++){
-						if(spaceMat [x,y,z,0] == -1){
-							if(z>0 && spaceMat [x,y,z-1,0]==-1) break;
-							if(moveBoxTo(x,y,z,chrom[i])||moveBoxTo(x,y,z,chrom[i], true)){
-								//Debug.Log("pushed "+chrom[i]+" to : " + x + " ; " + y + " ; " + z);
-								boxPositions[chrom[i]] = new Vector3(x,y,z);
-								pushed = true;
-								break;
-							}
-						}
-						if(pushed) break;
-					}
-					if(pushed) break;
+
+			Debug.Log("--------------------------------------BOX "+chrom[i]+"-----------------");
+			Debug.Log ("boxSize : "+boxSizes[chrom[i]].x+" ; "+boxSizes[chrom[i]].y+" ; "+boxSizes[chrom[i]].z);
+			for(int sp = 0; sp < startPoints.Count && !pushed; ++sp){
+				//Debug.Log(startPoints[sp].x+" ; "+startPoints[sp].y+" ; "+startPoints[sp].z);
+				Vector3 startPoint;
+				startPoint = pushToSide(startPoints[sp], boxSizes[chrom[i]].y);
+				if(checkSpace(startPoint, boxSizes[chrom[i]])){
+					Debug.Log("Space found");
+					Debug.Log(startPoint.x+" ; "+startPoint.y+" ; "+startPoint.z);
+					boxPositions[chrom[i]] = startPoint;
+					startPoints.Remove(startPoint);
+					createStartPoints(startPoint, boxSizes[chrom[i]]);
+					createLanes(startPoint, boxSizes[chrom[i]]);
+
+					pushed = true;
 				}
-				if(pushed) break;
+				else{
+					startPoint = pushToSide(startPoints[sp], boxSizes[chrom[i]].x);
+					if(checkSpace(startPoint, rotateSize(boxSizes[chrom[i]]))){
+						Debug.Log("Space found by rotating");
+						Debug.Log(startPoint.x+" ; "+startPoint.y+" ; "+startPoint.z);
+						boxSizes[chrom[i]] = rotateSize(boxSizes[chrom[i]]);
+						boxPositions[chrom[i]] = startPoint;
+						startPoints.Remove(startPoint);
+						((Default)boxes [chrom[i]].GetComponentsInChildren<Default> () [0]).rotate();
+						createStartPoints(startPoint, boxSizes[chrom[i]]);
+						createLanes(startPoint, boxSizes[chrom[i]]);
+						pushed = true;
+					}
+				}
+
 			}
+			if(pushed)orderStartPoints();
+			//Debug.Log(boxPositions[i].x+" ; "+boxPositions[i].y+" ; "+boxPositions[i].z);
+
 		}
+
 	}
 
+	Vector3 rotateSize(Vector3 size){
+		float temp = size.x;
+		size.x = size.y;
+		size.y = temp;
+		return size;
+	}
 	float scoring(){
 		float fr, fo, kr = 1, ko = 1;
 		int space_left = 0;
@@ -320,10 +573,57 @@ public class Controller : MonoBehaviour {
 		}
 	}
 
-	// Update is called once per frame
-	void Update () {
-	
+	int[,] permut(int[,] chromO , float probPermut){
+		int[,] chromP = new int[population, numberOfBoxes];
+
+		for (int parent1 = 0; parent1 < population; ++parent1) {
+			int parent2 = Random.Range(0,population-1);
+			for(int g = 0; g < numberOfBoxes; ++g)
+				chromP[parent1 ,g]=0;
+			for(int g = 0; g < numberOfBoxes; ++g){
+				float prob = Random.value;
+				if(prob<=probPermut && chromP[parent1 ,g]==0){
+					chromP[parent1 ,g] = chromO[parent2 ,g];
+					chromP[parent2 ,g] = chromO[parent1 ,g];
+					for(int i = 0; i < numberOfBoxes; ++i){
+						if(chromO[parent1, i] == chromP[parent1,g]){
+							for(int j = 0; j < numberOfBoxes; ++j){
+								if(chromO[parent2, j] == chromP[parent2,g]){
+									chromP[parent1,i] = chromO[parent2,j];
+									chromP[parent2,j] = chromO[parent1,i];
+									break;
+								}
+							}
+							break;
+						}
+
+					}
+
+				}
+				else if( chromP[parent1 ,g]==0)
+					chromP[parent1 ,g] = chromO[parent1 ,g];
+
+			}
+		}
+
+		return chromP;
 	}
+
+	int[,] mutat(int[,] chromO , float probMut){
+		for(int chr = 0; chr < population; ++chr){
+			for(int g = 0; g < numberOfBoxes; ++g){
+				if(Random.value < probMut){
+					int g2 = Random.Range(0,numberOfBoxes-1);
+					int temp = chromO[chr,g];
+					chromO[chr,g] = chromO[chr,g2];
+					chromO[chr,g2] = temp;
+				}
+			}
+		}
+		return chromO;
+	}
+
+
 
 	int getPas(int[] sizes){
 		if (sizes.Length > 2) {
@@ -348,4 +648,45 @@ public class Controller : MonoBehaviour {
 	int getPas(int a, int b){
 		return b == 0 ? a : getPas(b, a % b);
 	}
+
+	void display(){
+		Debug.Log ("lanes : " + lanes.Count);
+		Debug.Log ("startpoints : " + startPoints.Count);
+
+		activ = boxPositions.Length-1;
+		maxActiv = boxPositions.Length-1;
+		for (int i = 0; i < boxPositions.Length; ++i) {
+			if(boxPositions[i].x ==-1){ boxes[i].SetActive(false); activ--;}
+			Default sc = (Default)boxes [i].GetComponentsInChildren<Default> () [0];
+			sc.move (boxPositions[i]);
+		}
+		time = Time.realtimeSinceStartup - time;
+		Debug.Log ("Time : "+time);
+	}
+
+	void Update () {
+		bool flag = false;
+		if (Input.GetKeyDown (KeyCode.Return)){
+			flag = true;
+			activ = -1;
+		}
+		if (Input.GetKeyDown (KeyCode.Space)){
+			flag = true;
+			activ++;
+		}
+		if (Input.GetKeyDown (KeyCode.Backspace)){
+			flag = true;
+			activ--;
+		}
+		activ = (activ > maxActiv ? maxActiv : activ);
+		if(flag){
+			for(int i = 0; i <= activ; ++i)
+				boxes[chromosomes[0][i]].SetActive(true);
+			if(activ>=1)Debug.Log("Last moved : "+(chromosomes[0][activ-1]));
+			//Debug.Log("Last moved : "+(activ));
+			for(int i = (activ>=0?activ : 0); i <= maxActiv; ++i)
+				boxes[chromosomes[0][i]].SetActive(false);
+		}
+	}
 }
+

@@ -1,0 +1,5 @@
+A faire :
+
+- GUI, pour qu'on puisse travailler dessus sans l'editeur unity;
+- graphique de progression des score;
+- sortir l'éxecutable.

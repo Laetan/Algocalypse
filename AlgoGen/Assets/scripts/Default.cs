@@ -33,10 +33,8 @@ public class Default : MonoBehaviour {
 		if(!origin)
 			origin = transform.Find ("origin");
 		transform.position = new Vector3 (0, 0, 0);
-		//Debug.Log (origin.position);
-		//Debug.Log (new Vector3 (v.y, v.z, v.x) - origin.position);
+
 		transform.position = new Vector3 (v.y, v.z, -v.x) - origin.position;
-		//Debug.Log (origin.position);
 
 	}
 

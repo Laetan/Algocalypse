@@ -4,6 +4,7 @@ using System.Collections;
 public class BoxScript : MonoBehaviour {
 
 	public int priority;
+	public int id;
 	
 	void Start () {
 		
@@ -22,4 +23,7 @@ public class BoxScript : MonoBehaviour {
 		return priority;
 	}
 	
+	public void setId(int value){
+		id = value;
+	}
 }
