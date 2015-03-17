@@ -16,7 +16,9 @@ public class Controller0 : MonoBehaviour {
 	public bool randomBoxes;
 	public int cleanTimer;
 	public GameObject floor, wall, box;
-	
+
+	public Canvas ui_settings, ui_runtime;
+
 	private List<GameObject> boxes;
 	private int dimX, dimY, dimZ;
 	private int[] boxByPriority;
@@ -31,8 +33,9 @@ public class Controller0 : MonoBehaviour {
 	private BoxInfo[] boxInfos;
 	private int activ, maxActiv;
 	private int currentEvolution;
+	private int kr, ko;
 	private float time;
-	private bool debug, next;
+	private bool debug, next, running;
 	struct BoxInfo{
 		public Vector3 size;
 		public Vector3 pos;
@@ -53,13 +56,49 @@ public class Controller0 : MonoBehaviour {
 	}
 
 	void Start () {
+		kr = 1;
+		ko = 1;
+		running = false;
 		boxes = new List<GameObject> ();
 		boxByPriority = new int[11];
-		boxInfos = new BoxInfo[numberOfBoxes];
-		//boxesPushed = new int[numberOfBoxes,2];								//??
-		//boxSizePositions = new Vector3[numberOfBoxes, 2];
 		startPoints = new List<Vector3> ();
-		GameObject f = (GameObject)Instantiate (floor);
+		debug = false;
+		next = true;
+		currentEvolution = 0;
+		contenerWidth = 2.4F;
+		contenerHeight = 2.7F;
+		contenerLength = 12;
+		numberOfBoxes = 250;
+		numberOfChrom= 100;
+		kr= 1;
+		ko= 1;
+		probabilitePermutation = 0.5F;
+		probabiliteMutation = 0.5F;
+		tauxConservation = 0.8F;
+		numberOfEvolutions= 100;
+		stepByStep = true;
+	}
+
+
+	//UI Setters
+	public void setWidth(string value){contenerWidth = float.Parse(value);}
+	public void setHeight(string value){contenerHeight = float.Parse(value);}
+	public void setLength(string value){contenerLength = float.Parse(value);}
+	public void setNumberOfBoxes(string value){numberOfBoxes = int.Parse(value);}
+	public void setNumberOfChromosomes(string value){numberOfChrom= int.Parse(value);}
+	public void setKr(string value){kr= int.Parse(value);}
+	public void setKo(string value){ko= int.Parse(value);}
+	public void setProbaPermut(string value){probabilitePermutation = float.Parse(value);}
+	public void setProbaMuta(string value){probabiliteMutation = float.Parse(value);}
+	public void setConservRate(string value){tauxConservation = float.Parse(value);}
+	public void setNumberOfEvolutions(string value){numberOfEvolutions= int.Parse(value);}
+	public void setStepByStep(bool value){stepByStep = value;}
+
+	public void Launch(){
+		ui_settings.enabled = false;
+		running = true;
+		boxInfos = new BoxInfo[numberOfBoxes];
+		/*GameObject f = (GameObject)Instantiate (floor);
 		f.SendMessage ("resize", new Vector3 (contenerWidth/10,contenerLength/10,1));
 		f.SendMessage("move", new Vector3 (0,0,0));
 		
@@ -67,8 +106,7 @@ public class Controller0 : MonoBehaviour {
 		
 		f.SendMessage ("resize", new Vector3 (contenerHeight/10,contenerLength/10,1));
 		f.SendMessage("move", new Vector3 (0,0,0));
-		
-		//Debug.Log ("-------Box----------");
+		*/
 		int[][] sizes = new int[3][]; 
 		sizes [0] = new int[numberOfBoxes];
 		sizes [1] = new int[numberOfBoxes];
@@ -102,9 +140,7 @@ public class Controller0 : MonoBehaviour {
 			boxes[i].SendMessage("resize", boxSizes[i]);
 			boxes[i].SendMessage("setPriority", priority);
 			boxInfos[i].script = (Default)boxes[i].GetComponentsInChildren<Default>()[0];
-			//boxes[i].SendMessage("move", new Vector3 (0,0,0));
 			++boxByPriority[priority];
-			//boxes[i].SetActive(false);
 		}
 		pasXY = (float)getPas (getPas (sizes [0]), getPas (sizes [1]))/1000;
 		pasZ = (float)getPas (sizes [2])/1000;
@@ -117,9 +153,7 @@ public class Controller0 : MonoBehaviour {
 			minZ = (gridCoord.z<minZ ? (int)gridCoord.z : minZ);
 			boxInfos [i].size = gridCoord;
 		}
-		debug = false;
-		next = true;
-		currentEvolution = 0;
+
 		Debug.Log("-----------------Space config-------");
 		Debug.Log("Dimension : "+ dimX + " ; " + dimY+ " ; " + dimZ);
 		Debug.Log("Pas : "+ pasXY + " ; " + pasXY+ " ; " + pasZ); 
@@ -127,6 +161,7 @@ public class Controller0 : MonoBehaviour {
 		initialiszePopulation ();
 	}
 
+	/*
 	void displayChrom(int[][] chrom){
 		Debug.Log ("---------------------------------------------DEBUGGING-CHROMOSOMES---");
 		for (int i = 0; i < numberOfChrom; ++i) {
@@ -145,7 +180,7 @@ public class Controller0 : MonoBehaviour {
 			}
 		}	
 	}
-
+	*/
 	int getBoxAt(Vector3 pos, bool priority = false){
 		return spaceMat[(int)pos.x,(int)pos.y,(int)pos.z,(priority ? 1:0)];
 	}
@@ -299,7 +334,7 @@ public class Controller0 : MonoBehaviour {
 	
 	float scoring(int[]chrom){
 		orderBoxes (chrom);
-		float fr, fo, kr = 1, ko = 1;
+		float fr, fo;
 		int space_left = 0;
 		int boxPushed = 0;
 		for (int i = 1; i <= 10; ++i)
@@ -600,18 +635,18 @@ public class Controller0 : MonoBehaviour {
 			next = true;
 			activ++;
 		}
-		if (Input.GetKeyDown (KeyCode.LeftArrow)){
+		/*if (Input.GetKeyDown (KeyCode.LeftArrow)){
 			flag = true;
 			activ--;
 		}
 		if (Input.GetKeyDown (KeyCode.RightArrow)){
 			flag = true;
 			activ++;
-		}
+		}*/
 
 		activ = (activ > maxActiv ? maxActiv : activ);
 		activ = (activ < 0 ? 0 : activ);
-		if(flag){
+		if(running && flag){
 			for(int i = 0; i < activ; ++i)
 				boxes[chromosomes[0][i]].SetActive(true);
 			if(activ>0)Debug.Log("Last moved : "+(chromosomes[0][activ-1]));
@@ -619,7 +654,7 @@ public class Controller0 : MonoBehaviour {
 			for(int i = (activ>=0?activ : 0); i < numberOfBoxes; ++i)
 				boxes[chromosomes[0][i]].SetActive(false);
 		}
-		if (next) {
+		if (running && next) {
 			Debug.ClearDeveloperConsole();
 			Debug.Log("-------------------------------------------------------Evolution "+currentEvolution+"-------");
 			time = Time.realtimeSinceStartup;
