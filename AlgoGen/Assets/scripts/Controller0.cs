@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -22,11 +23,8 @@ public class Controller0 : MonoBehaviour {
 	private List<GameObject> boxes;
 	private int dimX, dimY, dimZ;
 	private int[] boxByPriority;
-	//private int[,] boxesPushed;
-	//private Vector3[] boxPositions, boxSizes;
 	private int[,,,] spaceMat; //position{3} - id/priority
 	private List<Vector3> startPoints;
-	//private Vector3[,] boxSizePositions;
 	private int[][] chromosomes;
 	private int minX,minY,minZ;
 	private float pasXY,pasZ;
@@ -35,7 +33,10 @@ public class Controller0 : MonoBehaviour {
 	private int currentEvolution;
 	private int kr, ko;
 	private float time;
-	private bool debug, next, running;
+	private Vector2 lastScore;
+	private int evolCounter;
+	private bool debug, next, running, write;
+	private FileWrite writerScript;
 	struct BoxInfo{
 		public Vector3 size;
 		public Vector3 pos;
@@ -56,6 +57,8 @@ public class Controller0 : MonoBehaviour {
 	}
 
 	void Start () {
+		write = true;
+		ui_runtime.enabled = false;
 		kr = 1;
 		ko = 1;
 		running = false;
@@ -77,6 +80,7 @@ public class Controller0 : MonoBehaviour {
 		tauxConservation = 0.8F;
 		numberOfEvolutions= 100;
 		stepByStep = true;
+		lastScore = new Vector2 (-1, -1);
 	}
 
 
@@ -93,9 +97,12 @@ public class Controller0 : MonoBehaviour {
 	public void setConservRate(string value){tauxConservation = float.Parse(value);}
 	public void setNumberOfEvolutions(string value){numberOfEvolutions= int.Parse(value);}
 	public void setStepByStep(bool value){stepByStep = value;}
+	public void setWriting(bool value){write = value;}
 
 	public void Launch(){
 		ui_settings.enabled = false;
+		ui_runtime.enabled = true;
+		writerScript = ui_runtime.GetComponentInChildren<FileWrite> ();
 		running = true;
 		boxInfos = new BoxInfo[numberOfBoxes];
 		/*GameObject f = (GameObject)Instantiate (floor);
@@ -141,6 +148,9 @@ public class Controller0 : MonoBehaviour {
 			boxes[i].SendMessage("setPriority", priority);
 			boxInfos[i].script = (Default)boxes[i].GetComponentsInChildren<Default>()[0];
 			++boxByPriority[priority];
+			//float p = 2-(float)priority/5;
+			//Debug.Log(p);
+			boxes[i].renderer.material.color = new Color(1,(float)(1+priority)/11,(float)(1+priority)/11);
 		}
 		pasXY = (float)getPas (getPas (sizes [0]), getPas (sizes [1]))/1000;
 		pasZ = (float)getPas (sizes [2])/1000;
@@ -486,7 +496,7 @@ public class Controller0 : MonoBehaviour {
 		return world;
 	}
 
-	void display(int[]chrom){
+	void display(int[]chrom, Vector2 score){
 		//debug = true;
 		orderBoxes (chrom);
 		maxActiv = numberOfBoxes;
@@ -496,6 +506,29 @@ public class Controller0 : MonoBehaviour {
 			else boxes[i].SetActive(true);
 			boxInfos[i].move(gridToWorld(boxInfos[i].pos));
 		}
+		if (lastScore [0] != -1 && score [1] - lastScore [1] < 1e-4)
+						evolCounter++;
+				else
+						evolCounter -= 2;
+
+		Text[] ui_fields = ui_runtime.GetComponentsInChildren<Text> ();
+		for(int i = 0 ; i < ui_fields.Length; i++){
+			if(ui_fields[i].name == "Evolution")
+				ui_fields[i].text = "Current Evolution : "+currentEvolution;
+			else if (ui_fields[i].name == "ScoreMax")
+				ui_fields[i].text = "Score max : "+score[0];
+			else if (ui_fields[i].name == "ScoreMoy")
+				ui_fields[i].text = "Score moy : "+score[1];
+			else if (ui_fields[i].name == "Warning"){
+				if(evolCounter>=10)
+					ui_fields[i].text = "No evolution !";
+				else
+					ui_fields[i].text = "";
+			}
+		}
+
+
+		lastScore = score;
 		debug = false;
 	}
 
@@ -570,11 +603,11 @@ public class Controller0 : MonoBehaviour {
 			}
 		}
 	}
-	Vector3 evolution(){
+	Vector2 evolution(){
 		int[][] popPerm, popMut, popPerMut, popTri;
 		float[] scoreO, scoreP, scoreM, scorePM, scoreTri;
 		int nbrToKeep = Mathf.RoundToInt (tauxConservation * numberOfChrom);
-		Debug.Log ("nbrToKeep : " + nbrToKeep);
+		//Debug.Log ("nbrToKeep : " + nbrToKeep);
 		scoreO = new float[numberOfChrom];
 		scoreP = new float[numberOfChrom];
 		scoreM = new float[numberOfChrom];
@@ -622,7 +655,7 @@ public class Controller0 : MonoBehaviour {
 		scoreMoy /= numberOfChrom;
 
 		currentEvolution++;
-		return new Vector3(scoreO[0], scoreMoy, scoreO[numberOfChrom-1]);
+		return new Vector2(scoreO[0], scoreMoy);
 	}
 
 	void Update () {
@@ -654,15 +687,15 @@ public class Controller0 : MonoBehaviour {
 			for(int i = (activ>=0?activ : 0); i < numberOfBoxes; ++i)
 				boxes[chromosomes[0][i]].SetActive(false);
 		}
-		if (running && next) {
-			Debug.ClearDeveloperConsole();
-			Debug.Log("-------------------------------------------------------Evolution "+currentEvolution+"-------");
+		if (running && next && currentEvolution < numberOfEvolutions) {
+			//Debug.Log("-------------------------------------------------------Evolution "+currentEvolution+"-------");
 			time = Time.realtimeSinceStartup;
-			Vector3 score = evolution();
-			display (chromosomes[0]);
+			Vector2 score = evolution();
+			display (chromosomes[0], score);
 			Debug.Log ("Evolution time : " + (Time.realtimeSinceStartup - time));
-			Debug.Log ("Score Max : "+score[0]+" ; Score Moyen : "+score[1]+" ; Score Min : "+score[2]);
+			//Debug.Log ("Score Max : "+score[0]+" ; Score Moyen : "+score[1]);
 			next = !stepByStep;
+			if(write) writerScript.write(currentEvolution, score);
 		}
 	}
 
