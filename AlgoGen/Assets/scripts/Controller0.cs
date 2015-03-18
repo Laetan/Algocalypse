@@ -2,6 +2,7 @@
 using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
 
 public class Controller0 : MonoBehaviour {
 
@@ -23,8 +24,8 @@ public class Controller0 : MonoBehaviour {
 	private List<GameObject> boxes;
 	private int dimX, dimY, dimZ;
 	private int[] boxByPriority;
-	private int[,,,] spaceMat; //position{3} - id/priority
-	private List<Vector3> startPoints;
+	//private int[,,,] spaceMat; //position{3} - id/priority
+	//private List<Vector3> startPoints;
 	private int[][] chromosomes;
 	private int minX,minY,minZ;
 	private float pasXY,pasZ;
@@ -54,7 +55,9 @@ public class Controller0 : MonoBehaviour {
 		public void move(Vector3 worldCoordinates){
 			script.move (worldCoordinates);
 		}
-	}
+	} 
+
+	private float [] scoreO, scoreP, scoreM, scorePM;
 
 	void Start () {
 		write = true;
@@ -64,7 +67,7 @@ public class Controller0 : MonoBehaviour {
 		running = false;
 		boxes = new List<GameObject> ();
 		boxByPriority = new int[11];
-		startPoints = new List<Vector3> ();
+		//startPoints = new List<Vector3> ();
 		debug = false;
 		next = true;
 		currentEvolution = 0;
@@ -146,6 +149,7 @@ public class Controller0 : MonoBehaviour {
 			boxes.Add((GameObject) Instantiate(box));
 			boxes[i].SendMessage("resize", boxSizes[i]);
 			boxes[i].SendMessage("setPriority", priority);
+			boxes[i].SendMessage("setId", i);
 			boxInfos[i].script = (Default)boxes[i].GetComponentsInChildren<Default>()[0];
 			++boxByPriority[priority];
 			//float p = 2-(float)priority/5;
@@ -191,14 +195,8 @@ public class Controller0 : MonoBehaviour {
 		}	
 	}
 	*/
-	int getBoxAt(Vector3 pos, bool priority = false){
-		return spaceMat[(int)pos.x,(int)pos.y,(int)pos.z,(priority ? 1:0)];
-	}
-	int getBoxAt(int x, int y, int z, bool priority = false){
-		return spaceMat[x,y,z,(priority ? 1:0)];
-	}
 	
-	bool checkPos(int x,int y, int z,Vector3 bSize){
+	bool checkPos(int x,int y, int z,Vector3 bSize, int[,,,] spaceMat){
 		
 		if (x + bSize.x > dimX || y + bSize.y > dimY || z + bSize.z > dimZ)
 			return false;
@@ -258,7 +256,7 @@ public class Controller0 : MonoBehaviour {
 		}
 	}
 
-	void createStartPoints(Vector3 pos, Vector3 size){
+	void createStartPoints(List<Vector3> startPoints,Vector3 pos, Vector3 size){
 		//Debug.Log ("Adding start points");
 		//Debug.Log ("size : "+size.x+" ; "+size.y+" ; "+size.z);
 		//Debug.Log ("pos : "+pos.x+" ; "+pos.y+" ; "+pos.z);
@@ -267,37 +265,40 @@ public class Controller0 : MonoBehaviour {
 		p1.z += size.z;
 		p2.x += size.x;
 		p3.y += size.y;
-		addStartPoint (p1);
-		addStartPoint (p2);
-		addStartPoint (p3);
+		addStartPoint (startPoints,p1);
+		addStartPoint (startPoints,p2);
+		addStartPoint (startPoints,p3);
 
 	}
 
-	void addStartPoint(Vector3 point){
-		//Debug.Log ("taille : "+point.x);
+	void addStartPoint(List<Vector3> startPoints,Vector3 point){
+
 		if (point.x + minX > dimX || point.y + minY > dimY || point.z + minZ > dimZ)
 			return;	
-		if (spaceMat [(int)point.x, (int)point.y, (int)point.z, 1] != 0)
+		/*if (spaceMat [(int)point.x, (int)point.y, (int)point.z, 1] != 0)
 						return;
 		if (point.z > 0 && spaceMat [(int)point.x, (int)point.y, (int)point.z - 1, 1] == 0)
-						return;
+						return;*/
 
-		
 		startPoints.Add (point);
 		//Debug.Log ("Added");
 	}
 
-	bool moveBoxTo(Vector3 v, int boxIndex, bool rotate = false){
-		return moveBoxTo((int)v.x,(int)v.y,(int)v.z,boxIndex, rotate);
+	bool moveBoxTo(Vector3 v, int boxIndex,ref int[,,,] spaceMat, ref bool rotated, bool rotate = false){
+		return moveBoxTo((int)v.x,(int)v.y,(int)v.z,boxIndex, ref spaceMat, ref rotated, rotate);
 	}
-	bool moveBoxTo(int x, int y, int z, int boxIndex, bool rotate = false){
+	bool moveBoxTo(int x, int y, int z, int boxIndex,  ref int[,,,] spaceMat, ref bool rotated, bool rotate = false){
 		//Debug.Log ("moving box to : " + x + " ; " + y + " ; " + z);
-
-		if (rotate)	boxInfos [boxIndex].rotate ();
-		//if(rotate) Debug.Log ("rotate");
 		Vector3 bSize = boxInfos [boxIndex].size;
+		if (rotate) {
+			float temp = bSize.x;
+			bSize.x = bSize.y;
+			bSize.y = temp;
+		}
+		//if(rotate) Debug.Log ("rotate");
+		//Vector3 bSize = boxInfos [boxIndex].size;
 
-		if(!checkPos(x,y,z,bSize)) return false;
+		if(!checkPos(x,y,z,bSize,spaceMat)) return false;
 		if(debug)Debug.Log("move to : " + x + " ; " + y + " ; " + z);
 		for(int xx = x; xx < x+bSize.x;xx++){
 			for(int yy = y; yy<y+bSize.y;yy++){
@@ -307,24 +308,31 @@ public class Controller0 : MonoBehaviour {
 				}
 			}
 		}
+		rotated = rotate;
+		if(rotate) Debug.Log ("rotate : "+boxIndex);
 		return true;
 		
 	}
-	void orderBoxes(int[]chrom){
-		clearSpace ();
+	void orderBoxes(int[]chrom, ref int[,,,] spaceMat, ref Vector3[] boxPositions, ref bool[] rotated ){
+		//clearSpace ();
 		for(int i = 0; i<numberOfBoxes; i++){
-			boxInfos[i].pos = new Vector3(-1,-1);
-			boxInfos[i].pushed = false;
-			if(boxInfos[i].rotated) boxInfos[i].rotate();
+			boxPositions[i] = new Vector3(-1,-1);
+			rotated[i] = false;
+
+			//boxInfos[i].pushed = false;
+			if(boxInfos[i].rotated) Debug.LogError("Box is rotated !");
 		}
-		startPoints.Clear ();
+		List<Vector3> startPoints = new List<Vector3> ();
 		startPoints.Add (new Vector3 (0, 0, 0));
 		int cleanFlag = cleanTimer;
 		for(int i = 0; i< numberOfBoxes; i++){
+
 			if(cleanFlag == 0){
 				cleanFlag = cleanTimer;
 				for (int sp = startPoints.Count-1; sp>=0; --sp) {
 					if(spaceMat [(int)startPoints[sp].x, (int)startPoints[sp].y, (int)startPoints[sp].z, 1] != 0)
+						startPoints.RemoveAt(sp);
+					else if(startPoints[sp].z>0 && spaceMat [(int)startPoints[sp].x, (int)startPoints[sp].y, (int)startPoints[sp].z-1, 1] == 0)
 						startPoints.RemoveAt(sp);
 				}
 			}
@@ -332,18 +340,58 @@ public class Controller0 : MonoBehaviour {
 			if(debug) Debug.Log("-------------BOX "+chrom[i]+"-------------");
 			if(debug)for(int sp = 0; sp < startPoints.Count; ++sp) Debug.Log("sp : "+ startPoints[sp].x + " ; " + startPoints[sp].y+ " ; " + startPoints[sp].z);
 			for(int sp = 0; sp < startPoints.Count; ++sp){
-				if(moveBoxTo(startPoints[sp],chrom[i])||moveBoxTo(startPoints[sp],chrom[i], true)){
-					boxInfos[chrom[i]].pos = startPoints[sp];
-					createStartPoints(boxInfos[chrom[i]].pos,boxInfos[chrom[i]].size);
-					boxInfos[chrom[i]].pushed = true;
+				//Debug.Log("sp :"+startPoints[sp]);
+				if(moveBoxTo(startPoints[sp],chrom[i], ref spaceMat, ref rotated[chrom[i]])||moveBoxTo(startPoints[sp],chrom[i],ref spaceMat, ref rotated[chrom[i]], true)){
+					//boxInfos[chrom[i]].pos = startPoints[sp];
+					boxPositions[chrom[i]] = startPoints[sp];
+					Vector3 bSize = boxInfos [chrom[i]].size;
+					if (rotated[chrom[i]]) {
+						float temp = bSize.x;
+						bSize.x = bSize.y;
+						bSize.y = temp;
+					}
+					createStartPoints(startPoints,startPoints[sp],bSize);
+					//boxInfos[chrom[i]].pushed = true;
 					break;
 				}
 			}
 		}
+		/*for(int i = 0; i<numberOfBoxes; i++){
+			if(boxInfos[i].rotated) boxInfos[i].rotate(displaying);
+		}*/
 	}
-	
-	float scoring(int[]chrom){
-		orderBoxes (chrom);
+	void scoring_thread(int[]chrom, int modif, int pos){
+		int[,,,] t_spaceMat = new int[dimX,dimY,dimZ,2];
+		Vector3[] t_boxPos = new Vector3[numberOfBoxes];
+		bool [] t_rotated = new bool[numberOfBoxes];
+		//debug = true;
+		orderBoxes (chrom, ref t_spaceMat, ref t_boxPos, ref t_rotated);
+		//Debug.Log (t_boxPos[0]);
+		float score = scoring (chrom, t_spaceMat, t_boxPos, t_rotated);
+		//Debug.Log (t_boxPos[0]);
+		//float score = 0;
+		switch (modif) {
+				case 0:
+			//Debug.Log("scoring original number "+pos);
+						scoreO [pos] = score;
+						break;
+				case 1:
+			//Debug.Log("scoring permuted number "+pos);
+						scoreP [pos] = score;
+						break;
+				case 2:
+			//Debug.Log("scoring muted number "+pos);
+						scoreM [pos] = score;
+						break;
+				case 3:
+			//Debug.Log("scoring permut-muted number "+pos);
+						scorePM [pos] = score;
+						break;
+				}
+	}
+
+	float scoring(int[]chrom, int[,,,] spaceMat, Vector3[] boxPositions, bool[] rotated){
+		//orderBoxes (chrom);
 		float fr, fo;
 		int space_left = 0;
 		int boxPushed = 0;
@@ -371,7 +419,7 @@ public class Controller0 : MonoBehaviour {
 			}
 			int np = 0;
 			for(int i =0; i<numberOfBoxes; i++)
-				if(boxInfos[i].priority == p && boxInfos[i].pushed)
+				if(boxInfos[i].priority == p && boxPositions[i].x!=-1)
 					++np;
 			
 			if(np == boxByPriority[p]){
@@ -380,10 +428,10 @@ public class Controller0 : MonoBehaviour {
 			}
 			int vol_pm = 0, vol_p = dimX*dimY*dimZ;			//vol_pm: volume boxes pose de priorté inf ; vol_p : plus petite caisse de priorité p
 			for(int i =0; i<numberOfBoxes; i++)
-				if(boxInfos[i].priority >= p && boxInfos[i].pushed)
+				if(boxInfos[i].priority >= p && boxPositions[i].x!=-1)
 					vol_pm += getVolume(i);
 			for(int i = 0; i<numberOfBoxes; ++i){
-				if(!boxInfos[i].pushed && boxInfos[i].priority == p){
+				if(boxPositions[i].x ==-1 && boxInfos[i].priority == p){
 					int v = getVolume(i);
 					vol_p= (v>vol_p?v:vol_p);
 				}
@@ -404,9 +452,14 @@ public class Controller0 : MonoBehaviour {
 			int n1 = 0, n2 = 0;
 			//while (index < boxesPushed.Length/2 && boxesPushed[index,1]!=0) {
 			for(int i = 0; i < numberOfBoxes; ++i){
-				if(boxInfos[i].priority!=priority || !boxInfos[i].pushed) continue;
-				Vector3 pos =boxInfos[i].pos;
+				if(boxInfos[i].priority!=priority || boxPositions[i].x ==-1) continue;
+				Vector3 pos =boxPositions[i];
 				Vector3 size = boxInfos[i].size;
+				if(rotated[i]){
+					float temp = size.x;
+					size.x = size.y;
+					size.y = temp;
+				}
 				bool blocked = false;
 				for (int x = (int)pos.x; x< pos.x+size.x; x++){
 					for (int z = (int)pos.z; z<pos.z+size.z; z++){
@@ -453,7 +506,7 @@ public class Controller0 : MonoBehaviour {
 		return (int)(v.x * v.y * v.z * 1000);
 	}
 	void clearSpace(){
-		spaceMat = new int[dimX,dimY,dimZ,2];
+		//spaceMat = new int[dimX,dimY,dimZ,2];
 	}
 	
 	int getPas(int[] sizes){
@@ -498,13 +551,20 @@ public class Controller0 : MonoBehaviour {
 
 	void display(int[]chrom, Vector2 score){
 		//debug = true;
-		orderBoxes (chrom);
+		int[,,,] spaceMat = new int[dimX,dimY,dimZ,2];
+		Vector3[] boxPos = new Vector3[numberOfBoxes];
+		bool [] rotated = new bool[numberOfBoxes];
+		orderBoxes (chrom, ref spaceMat, ref boxPos, ref rotated);
+		//orderBoxes (chrom);
+
 		maxActiv = numberOfBoxes;
 		activ = maxActiv;
 		for (int i = 0; i < numberOfBoxes; ++i) {
-			if(boxInfos[i].pos.x ==-1){ boxes[i].SetActive(false); activ--;}
+			if(boxPos[i].x ==-1){ boxes[i].SetActive(false); activ--;}
 			else boxes[i].SetActive(true);
-			boxInfos[i].move(gridToWorld(boxInfos[i].pos));
+			if(rotated[i]) boxInfos[i].rotate();
+			boxInfos[i].move(gridToWorld(boxPos[i]));
+
 		}
 		if (lastScore [0] != -1 && score [1] - lastScore [1] < 1e-4)
 						evolCounter++;
@@ -530,6 +590,7 @@ public class Controller0 : MonoBehaviour {
 
 		lastScore = score;
 		debug = false;
+
 	}
 
 	int[][] permut(int[][] chromO , float probPermut){
@@ -604,8 +665,11 @@ public class Controller0 : MonoBehaviour {
 		}
 	}
 	Vector2 evolution(){
+		for(int i = 0; i<numberOfBoxes; i++){
+			if(boxInfos[i].rotated) boxInfos[i].rotate();
+		}
 		int[][] popPerm, popMut, popPerMut, popTri;
-		float[] scoreO, scoreP, scoreM, scorePM, scoreTri;
+		float[]  scoreTri;
 		int nbrToKeep = Mathf.RoundToInt (tauxConservation * numberOfChrom);
 		//Debug.Log ("nbrToKeep : " + nbrToKeep);
 		scoreO = new float[numberOfChrom];
@@ -621,13 +685,29 @@ public class Controller0 : MonoBehaviour {
 
 		popPerMut = permut (popPerm, probabiliteMutation);
 
+		Thread[] threads = new Thread[numberOfChrom * 4];
+		/*
 		for(int i = 0; i < numberOfChrom; ++i){
 			scoreO[i] = scoring(chromosomes[i]);
 			scoreP[i] = scoring(popPerm[i]);
 			scoreM[i] = scoring(popMut[i]);
 			scorePM[i] = scoring(popPerMut[i]);
+		}*/
+		Debug.Log ("start threading");
+		for(int i = 0; i < numberOfChrom; ++i){
+			threads[i*4] = new Thread(()=>scoring_thread(chromosomes[i],0,i));
+			threads[i*4].Start();
+			threads[i*4+1] = new Thread(()=>scoring_thread(popPerm[i],1,i));
+			threads[i*4+1].Start();
+			threads[i*4+2] = new Thread(()=>scoring_thread(popMut[i],2,i));
+			threads[i*4+2].Start();
+			threads[i*4+3] = new Thread(()=>scoring_thread(popPerMut[i],3,i));
+			threads[i*4+3].Start();
 		}
 
+		for (int i = 0; i < numberOfChrom*4; ++i)
+						threads [i].Join ();
+		Debug.Log ("end threading");
 		triage (ref chromosomes, ref scoreO);
 		triage (ref popPerm, ref scoreP);
 		triage (ref popMut, ref scoreM);
