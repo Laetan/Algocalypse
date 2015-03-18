@@ -18,6 +18,7 @@ public class Controller0 : MonoBehaviour {
 	public bool randomBoxes;
 	public int cleanTimer;
 	public GameObject floor, wall, box;
+	public int maxThreads;
 
 	public Canvas ui_settings, ui_runtime;
 
@@ -103,6 +104,8 @@ public class Controller0 : MonoBehaviour {
 	public void setWriting(bool value){write = value;}
 
 	public void Launch(){
+		if (!ui_settings.enabled)
+						return;
 		ui_settings.enabled = false;
 		ui_runtime.enabled = true;
 		writerScript = ui_runtime.GetComponentInChildren<FileWrite> ();
@@ -685,7 +688,7 @@ public class Controller0 : MonoBehaviour {
 
 		popPerMut = permut (popPerm, probabiliteMutation);
 
-		Thread[] threads = new Thread[numberOfChrom * 4];
+		Thread[] threads = new Thread[maxThreads];
 		/*
 		for(int i = 0; i < numberOfChrom; ++i){
 			scoreO[i] = scoring(chromosomes[i]);
@@ -693,21 +696,27 @@ public class Controller0 : MonoBehaviour {
 			scoreM[i] = scoring(popMut[i]);
 			scorePM[i] = scoring(popPerMut[i]);
 		}*/
-		Debug.Log ("start threading");
-		for(int i = 0; i < numberOfChrom; ++i){
-			threads[i*4] = new Thread(()=>scoring_thread(chromosomes[i],0,i));
-			threads[i*4].Start();
-			threads[i*4+1] = new Thread(()=>scoring_thread(popPerm[i],1,i));
-			threads[i*4+1].Start();
-			threads[i*4+2] = new Thread(()=>scoring_thread(popMut[i],2,i));
-			threads[i*4+2].Start();
-			threads[i*4+3] = new Thread(()=>scoring_thread(popPerMut[i],3,i));
-			threads[i*4+3].Start();
-		}
+		//Debug.Log ("start threading");
+		int j = 0; 
+		while(j < numberOfChrom){
+			for(int i = 0; i < maxThreads/4; ++i){
+				int pos = i + j;
+				threads[i*4] = new Thread(()=>scoring_thread(chromosomes[pos],0,pos));
+				threads[i*4].Start();
+				threads[i*4+1] = new Thread(()=>scoring_thread(popPerm[pos],1,pos));
+				threads[i*4+1].Start();
+				threads[i*4+2] = new Thread(()=>scoring_thread(popMut[pos],2,pos));
+				threads[i*4+2].Start();
+				threads[i*4+3] = new Thread(()=>scoring_thread(popPerMut[pos],3,pos));
+				threads[i*4+3].Start();
+				if(pos+1>numberOfChrom) break;
+			}
 
-		for (int i = 0; i < numberOfChrom*4; ++i)
-						threads [i].Join ();
-		Debug.Log ("end threading");
+			for (int i = 0; i < maxThreads; ++i)
+					threads [i].Join ();
+			j+= maxThreads/4;
+		}
+		//Debug.Log ("end threading");
 		triage (ref chromosomes, ref scoreO);
 		triage (ref popPerm, ref scoreP);
 		triage (ref popMut, ref scoreM);
@@ -740,13 +749,12 @@ public class Controller0 : MonoBehaviour {
 
 	void Update () {
 		bool flag = false; 
-		if (Input.GetKeyDown (KeyCode.Return)){
+		/*if (Input.GetKeyDown (KeyCode.Return)){
 			flag = true;
 			activ = 0;
-		}
+		}*/
 		if (Input.GetKeyDown (KeyCode.Space)){
 			next = true;
-			activ++;
 		}
 		/*if (Input.GetKeyDown (KeyCode.LeftArrow)){
 			flag = true;

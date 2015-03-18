@@ -16,7 +16,6 @@ public class FileWrite : MonoBehaviour {
 					break;
 				i++;
 			}
-			Debug.Log(filename);
 			writer = new StreamWriter(filename);
 		}
 		writer.WriteLine ("{0};{1}",score [0].ToString().Replace(".",","), score [1].ToString().Replace(".",","));
